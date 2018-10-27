@@ -26,7 +26,9 @@ SECRET_KEY = '+id5v1uq7cj!4=0)z7j(zb2tl&-=7bi$oboeg!7x-=77r$3lpj'
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    '33dae0be.ngrok.io',
+    '1a607f92.ngrok.io',
+    '6890fec0.ngrok.io',
+    '127.0.0.1',
 ]
 
 
@@ -77,9 +79,24 @@ WSGI_APPLICATION = 'chatbotproject.wsgi.application'
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
 
 DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#        'NAME': 'chatbot',
+#        'USER': 'admin',
+#        'PASSWORD': 'admin',
+#        'HOST': 'localhost',
+#        'PORT': '',
+#    }
+#    'default': {
+#        'ENGINE': 'django.db.backends.postgresql',
+#        'NAME': 'postgres',
+#        'USER': 'postgres',
+#        'HOST': 'db',
+#        'PORT': 5432,
+#    }
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'NAME': 'test.sqlite3',
     }
 }
 
