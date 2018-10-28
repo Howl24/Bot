@@ -125,9 +125,44 @@ class FacebookMessage(object):
                 conversation.save()
 
             if self.msg == StateEnum.CHECK_REPORTS.value:
-                # TODO
-                # Report menu
-                pass
+
+                cnt_users = Conversation.objects.all().count()
+                report_text = "Número de usuarios: " + str(cnt_users)
+
+                response_msg = {
+                        "message": {
+                            "text": report_text,
+                            }
+                    }
+
+                self.post_message(response_msg)
+
+                # menu options
+                response_msg = {
+                    "message": {
+                        "attachment": {
+                            "type": "template",
+                            "payload": {
+                                "template_type": "button",
+                                "text": configuration.MENU_MSG_2,
+                                "buttons": [
+                                    {
+                                        "type": "postback",
+                                        "title": configuration.MENU_BTN_SEARCH_TITLE,
+                                        "payload": StateEnum.SEARCH_LYRICS.value,
+                                    },
+                                    {
+                                        "type": "postback",
+                                        "title": configuration.MENU_BTN_REPORTS_TITLE,
+                                        "payload": StateEnum.CHECK_REPORTS.value,
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+
+                self.post_message(response_msg)
 
         elif conversation.state == str(StateEnum.SEARCH_LYRICS):
             if self.msg == StateEnum.SEARCH_NEW_SONG.value:
@@ -169,43 +204,6 @@ class FacebookMessage(object):
                 self.post_message(response_msg)
                 conversation.state = StateEnum.SHOW_LYRICS_FAV
                 conversation.save()
-
-
-
-                #track_list = [get_track(track.track_id)
-                #              for track in Track.objects.filter(
-                #                conversation=conversation)]
-
-                #elements = []
-                #for track in track_list:
-                #    elements.append({
-                #        'title': track['artist_name'],
-                #        'buttons': [
-                #            {
-                #                "type": "postback",
-                #                "title": track['track_name'],
-                #                "payload": track['track_id'],
-                #            }
-                #        ]
-                #    })
-
-                #if elements:
-                #    response_msg = {
-                #        "message": {
-                #            "attachment": {
-                #                "type": "template",
-                #                "payload": {
-                #                    "template_type": "list",
-                #                    "top_element_style": "full",
-                #                    "elements": elements[:4],
-                #                }
-                #            }
-                #        },
-                #    }
-
-                #    self.post_message(response_msg)
-                #    conversation.state = StateEnum.SHOW_LYRICS
-                #    conversation.save()
 
         elif conversation.state == str(StateEnum.SEARCH_NEW_SONG):
             response_msg = {
