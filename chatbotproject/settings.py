@@ -27,7 +27,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY',
 DEBUG = bool(os.environ.get('DJANGO_DEBUG', True))
 
 ALLOWED_HOSTS = [
-    'still-ravine-89797.herokuapp.com'
+    'still-ravine-89797.herokuapp.com',
     '127.0.0.1',
     '1a607f92.ngrok.io',
     '6890fec0.ngrok.io',
