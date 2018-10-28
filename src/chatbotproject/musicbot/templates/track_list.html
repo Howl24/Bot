@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Listado de canciones</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+<style>
+.inputGroup {
+  background-color: #fff;
+  display: block;
+  margin: 10px 0;
+  position: relative;
+}
+.inputGroup label {
+  padding: 12px 30px;
+  width: 100%;
+  display: block;
+  text-align: left;
+  color: #3c454c;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  transition: color 200ms ease-in;
+  overflow: hidden;
+}
+.inputGroup label:before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  content: "";
+  background-color: #5562eb;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  -webkit-transform: translate(-50%, -50%) scale3d(1, 1, 1);
+          transform: translate(-50%, -50%) scale3d(1, 1, 1);
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  z-index: -1;
+}
+.inputGroup label:after {
+  width: 32px;
+  height: 32px;
+  content: "";
+  border: 2px solid #d1d7dc;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.414 11L4 12.414l5.414 5.414L20.828 6.414 19.414 5l-10 10z' fill='%23fff' fill-rule='nonzero'/%3E%3C/svg%3E ");
+  background-repeat: no-repeat;
+  background-position: 2px 3px;
+  border-radius: 50%;
+  z-index: 2;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  -webkit-transform: translateY(-50%);
+          transform: translateY(-50%);
+  cursor: pointer;
+  transition: all 200ms ease-in;
+}
+.inputGroup input:checked ~ label {
+  color: #fff;
+}
+.inputGroup input:checked ~ label:before {
+  -webkit-transform: translate(-50%, -50%) scale3d(56, 56, 1);
+          transform: translate(-50%, -50%) scale3d(56, 56, 1);
+  opacity: 1;
+}
+.inputGroup input:checked ~ label:after {
+  background-color: #54e0c7;
+  border-color: #54e0c7;
+}
+.inputGroup input {
+  width: 32px;
+  height: 32px;
+  order: 1;
+  z-index: 2;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  -webkit-transform: translateY(-50%);
+          transform: translateY(-50%);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.form {
+  padding: 0 16px;
+  max-width: 550px;
+  margin: 50px auto;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+}
+
+body {
+  background-color: #d1d7dc;
+  font-family: "Fira Sans", sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+code {
+  background-color: #9aa3ac;
+  padding: 0 8px;
+}
+</style>
+  </head>
+  <body>
+    <script>
+      (function(d, s, id){
+        var js, fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) {return;}
+        js = d.createElement(s); js.id = id;
+        js.src = "//connect.facebook.net/en_US/messenger.Extensions.js";
+        fjs.parentNode.insertBefore(js, fjs);
+      }(document, 'script', 'Messenger'));
+    </script>
+    <form class="form" id="trackForm" method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="tracklist">
+      </div>
+      <input type="submit" value="Aceptar">
+    </form>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+  <script>
+    window.extAsyncInit = function() {
+      console.log('Messenger extensions are ready');
+
+      var APP_ID = '1980550775299550';
+      MessengerExtensions.getContext(APP_ID,
+        function success(thread_context){
+          var sender_id = thread_context.psid;
+
+          $.ajax({
+            url: '/musicbot/ajax/get_track_list/',
+            data: {
+              "sender_id": sender_id
+            },
+            dataType: 'json',
+            success: function(data){
+              var track_list = data['track_list']
+
+              var i;
+              for (i=0;i<track_list.length;i++){
+                var track = track_list[i];
+                var template = '<div class="inputGroup">' +
+                  '<input id="' + track.track_id +
+                  '" name="track_radio" type="radio"'+
+                  ' value="'+ track.track_id + '" >'+
+                  '<label for="' + track.track_id + '">'
+                  + track.track_name + '</label>' +
+                  '</div>'
+                $(".tracklist").append(template);
+              }
+
+              $("input[name='track_radio']").change(function(){
+                $("#id_track_id").val($(this).val());
+                $("#id_sender_id").val(sender_id);
+              });
+            },
+            error: function(error){
+              $('#sender_id').html('error');
+            }
+          });
+        },
+        function error(err){
+          $('#sender_id').html(err);
+          console.log("Error getting Messenger context");
+        });
+
+      // handle button click
+      $('#trackForm').submit(function(){
+        console.log('Submit pressed');
+
+        MessengerExtensions.requestCloseBrowser(function() {
+          console.log("Window will be closed");
+        }, function(error) {
+          console.log("Error in MessengerExtensions");
+          console.log(error);
+        });
+      });
+    }
+  </script>
+  </body>
+</html>

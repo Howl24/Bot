@@ -20,6 +20,7 @@ class StateEnum(Enum):
     SEARCH_NEW_SONG = "Nueva canción"
     SEARCH_FROM_FAV = "De favoritos"
     SHOW_LYRICS = "Mostrar letras"
+    SHOW_LYRICS_FAV = "mostrar_letras_favoritos"
     SAVE_TRACK = "Guardar en favoritos"
 
 class Conversation(TimeStampedModel):

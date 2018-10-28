@@ -2,6 +2,9 @@
 from django.views import generic
 from django.http.response import HttpResponse
 from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.http import JsonResponse
+
 from django.views.decorators.csrf import csrf_exempt
 from pprint import pprint
 import json
@@ -9,84 +12,15 @@ import requests
 from .models import Message, Conversation, StateEnum, Track
 
 from django.shortcuts import get_object_or_404
-
-
-def call_musixmatch_api(service, params):
-    base_url = "https://api.musixmatch.com/ws/1.1/"
-    api_key = "&apikey=41da9710650383c323dc1f32dabd847d"
-    format_url = "?format=json&callback=callback"
-
-    api_call = base_url + service + format_url + params + api_key
-
-    print("API Call: ", api_call)
-    return requests.get(api_call)
-
-
-def search_track(track_query):
-    service = "track.search"
-    params = "&q_lyrics=" + track_query + "&f_has_lyrics=1" + "&s_track_rating=desc"
-
-    request = call_musixmatch_api(service, params)
-    data = request.json()
-    data = data['message']['body']
-
-    track_list = [track['track'] for track in data['track_list']]
-    # pprint(track_list)
-    return track_list
-
-
-def get_track(track_id):
-    service = "track.get"
-    params = "&track_id=" + track_id
-    request = call_musixmatch_api(service, params)
-    
-    data = request.json()
-    data = data['message']['body']
-    return data['track']
-
-def get_lyrics(track_id):
-    service = "track.lyrics.get"
-    params = "&track_id=" + track_id
-    request = call_musixmatch_api(service, params)
-    data = request.json()
-    data = data['message']['body']
-    lyrics = data['lyrics']['lyrics_body']
-    print("Lyrics:", lyrics)
-    return lyrics
-
-# Menu de inicio
-MENU_MSG_1 = "Hola! Soy Musicbot! Un bot para encontrar la letra de tus canciones favoritas!"
-
-MENU_MSG_2 = "Quieres buscar la letra de alguna canción? o prefieres ver algunos reportes de la aplicación?"
-
-MENU_BTN_SEARCH_TITLE = "Buscar letras"
-MENU_BTN_SEARCH_PAYLOAD = "MENU_SEARCH"
-
-MENU_BTN_REPORTS_TITLE = "Ver reportes"
-MENU_BTN_REPORTS_PAYLOAD = "MENU_REPORTS"
-
-
-# Menu de busqueda de letra de canciones
-MENU_SEARCH_MSG = "Deseas buscar una nueva canción o seleccionar una de tu lista de favoritos?"
-
-MENU_SEARCH_NEW_TITLE = "Nueva canción"
-MENU_SEARCH_NEW_PAYLOAD = "NEW_SONG"
-
-MENU_SEARCH_FAV_TITLE = "De favoritos"
-MENU_SEARCH_FAV_PAYLOAD = "FAV_SONG_LIST"
-
-# Boton de empezar
-GET_STARTED_PAYLOAD = "Empezar"
-
-# Preguntar song query
-ASK_SONG_QUERY = "Escribe el nombre de la canción o algunas letras que recuerdes"
-
-NO_TRACKS_FOUND = "No se encontraron canciones :("
+from . import configuration
+from .musixmatch import search_track
+from .musixmatch import get_track
+from .musixmatch import get_lyrics
+from .forms import TrackForm
 
 
 class FacebookMessage(object):
-    TOKEN = 'EAAcJTOlr3d4BAJtAZBplo14EZBgqzkRZAFLheupz05V8ZAt1EGYNAly0LKZCZBdYr4gBOU3ZCegE6RQ6ixlGhCeKgPbItRnwrLRez8DNrGlZC1mJm9uGDIJXq3nEbY4dZBPxeo1J3GF9CN0She748Pn3yMVFLqICFYEUYQeA6qFsNfoyBwz72dRl5'
-    POST_MESSAGE_URL = 'https://graph.facebook.com/v3.1/me/messages?access_token=' + TOKEN
+    POST_MESSAGE_URL = configuration.FACEBOOK_POST_MESSAGE_URL
 
     def __init__(self, sender_id, msg):
         self.sender_id = sender_id
@@ -121,7 +55,7 @@ class FacebookMessage(object):
            conversation.state == StateEnum.NEW:
             # welcome msg
             response_msg = {
-                    "message": {"text": MENU_MSG_1}
+                    "message": {"text": configuration.MENU_MSG_1}
                     }
 
             self.post_message(response_msg)
@@ -133,16 +67,16 @@ class FacebookMessage(object):
                         "type": "template",
                         "payload": {
                             "template_type": "button",
-                            "text": MENU_MSG_2,
+                            "text": configuration.MENU_MSG_2,
                             "buttons": [
                                 {
                                     "type": "postback",
-                                    "title": MENU_BTN_SEARCH_TITLE,
+                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
                                     "payload": StateEnum.SEARCH_LYRICS.value,
                                 },
                                 {
                                     "type": "postback",
-                                    "title": MENU_BTN_REPORTS_TITLE,
+                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
                                     "payload": StateEnum.CHECK_REPORTS.value,
                                 }
                             ]
@@ -157,7 +91,7 @@ class FacebookMessage(object):
             conversation.state = StateEnum.GET_STARTED
             conversation.save()
 
-        if conversation.state == str(StateEnum.GET_STARTED):
+        elif conversation.state == str(StateEnum.GET_STARTED):
             if self.msg == StateEnum.SEARCH_LYRICS.value:
                 # search options
                 response_msg = {
@@ -166,16 +100,16 @@ class FacebookMessage(object):
                             "type": "template",
                             "payload": {
                                 "template_type": "button",
-                                "text": MENU_SEARCH_MSG,
+                                "text": configuration.MENU_SEARCH_MSG,
                                 "buttons": [
                                     {
                                         "type": "postback",
-                                        "title": MENU_SEARCH_NEW_TITLE,
+                                        "title": configuration.MENU_SEARCH_NEW_TITLE,
                                         "payload": StateEnum.SEARCH_NEW_SONG.value,
                                     },
                                     {
                                         "type": "postback",
-                                        "title": MENU_SEARCH_FAV_TITLE,
+                                        "title": configuration.MENU_SEARCH_FAV_TITLE,
                                         "payload": StateEnum.SEARCH_FROM_FAV.value,
                                     }
                                 ]
@@ -195,12 +129,12 @@ class FacebookMessage(object):
                 # Report menu
                 pass
 
-        if conversation.state == str(StateEnum.SEARCH_LYRICS):
+        elif conversation.state == str(StateEnum.SEARCH_LYRICS):
             if self.msg == StateEnum.SEARCH_NEW_SONG.value:
                 # ask song query
                 response_msg = {
                     "message": {
-                        "text": ASK_SONG_QUERY,
+                        "text": configuration.ASK_SONG_QUERY,
                     }
                 }
                 self.post_message(response_msg)
@@ -210,83 +144,97 @@ class FacebookMessage(object):
                 conversation.save()
 
             if self.msg == StateEnum.SEARCH_FROM_FAV.value:
-                track_list = [get_track(track.track_id)
-                              for track in Track.objects.filter(
-                                conversation=conversation)]
-
-                elements = []
-                for track in track_list:
-                    elements.append({
-                        'title': track['artist_name'],
-                        'buttons': [
-                            {
-                                "type": "postback",
-                                "title": track['track_name'],
-                                "payload": track['track_id'],
-                            }
-                        ]
-                    })
-
-                if elements:
-                    response_msg = {
+                response_msg = {
                         "message": {
                             "attachment": {
                                 "type": "template",
                                 "payload": {
-                                    "template_type": "list",
-                                    "top_element_style": "compact",
-                                    "elements": elements[:4],
+                                    "template_type": "button",
+                                    "text": "Selecciona una canción de la lista",
+                                    "buttons": [
+                                        {
+                                            "type": "web_url",
+                                            "url": "https://4dbb16ea.ngrok.io/musicbot/webview",
+                                            "title": "Ver canciones",
+                                            "webview_height_ratio": "tall",
+                                            "messenger_extensions": "true",
+                                            "fallback_url": "https://4dbb16ea.ngrok.io/musicbot/webview/",
+                                        }
+                                        ]
+                                    }
                                 }
                             }
-                        },
-                    }
+                }
 
-                    self.post_message(response_msg)
-                    conversation.state = StateEnum.SHOW_LYRICS
-                    conversation.save()
+                self.post_message(response_msg)
+                conversation.state = StateEnum.SHOW_LYRICS_FAV
+                conversation.save()
 
-        if conversation.state == str(StateEnum.SEARCH_NEW_SONG):
-            track_list = search_track(self.msg)
 
-            elements = []
-            for track in track_list:
-                elements.append({
-                    'title': track['artist_name'],
-                    'buttons': [
-                        {
-                            "type": "postback",
-                            "title": track['track_name'],
-                            "payload": track['track_id'],
-                        }
-                    ]
-                })
 
-            if elements:
-                response_msg = {
+                #track_list = [get_track(track.track_id)
+                #              for track in Track.objects.filter(
+                #                conversation=conversation)]
+
+                #elements = []
+                #for track in track_list:
+                #    elements.append({
+                #        'title': track['artist_name'],
+                #        'buttons': [
+                #            {
+                #                "type": "postback",
+                #                "title": track['track_name'],
+                #                "payload": track['track_id'],
+                #            }
+                #        ]
+                #    })
+
+                #if elements:
+                #    response_msg = {
+                #        "message": {
+                #            "attachment": {
+                #                "type": "template",
+                #                "payload": {
+                #                    "template_type": "list",
+                #                    "top_element_style": "full",
+                #                    "elements": elements[:4],
+                #                }
+                #            }
+                #        },
+                #    }
+
+                #    self.post_message(response_msg)
+                #    conversation.state = StateEnum.SHOW_LYRICS
+                #    conversation.save()
+
+        elif conversation.state == str(StateEnum.SEARCH_NEW_SONG):
+            response_msg = {
                     "message": {
                         "attachment": {
                             "type": "template",
                             "payload": {
-                                "template_type": "list",
-                                "top_element_style": "compact",
-                                "elements": elements[:4],
+                                "template_type": "button",
+                                "text": "Selecciona una canción de la lista",
+                                "buttons": [
+                                    {
+                                        "type": "web_url",
+                                        "url": "https://4dbb16ea.ngrok.io/musicbot/webview",
+                                        "title": "Ver canciones",
+                                        "webview_height_ratio": "tall",
+                                        "messenger_extensions": "true",
+                                        "fallback_url": "https://4dbb16ea.ngrok.io/musicbot/webview/",
+                                    }
+                                    ]
+                                }
                             }
                         }
-                    },
-                }
-                self.post_message(response_msg)
-                conversation.state = StateEnum.SHOW_LYRICS
-                conversation.save()
-            else:
-                response_msg = {
-                    "message": {"text": NO_TRACKS_FOUND}
-                }
+            }
 
-                self.post_message(response_msg)
-                # update state
-                # TODO return to previous
+            self.post_message(response_msg)
+            conversation.state = StateEnum.SHOW_LYRICS
+            conversation.save()
 
-        if conversation.state == str(StateEnum.SHOW_LYRICS):
+        elif conversation.state == str(StateEnum.SHOW_LYRICS):
             lyrics = get_lyrics(self.msg)
             response_msg = {
                     "message": {"text": lyrics}
@@ -317,11 +265,50 @@ class FacebookMessage(object):
             conversation.state = StateEnum.SAVE_TRACK
             conversation.save()
 
-        if conversation.state == str(StateEnum.SAVE_TRACK):
+        elif conversation.state == str(StateEnum.SHOW_LYRICS_FAV):
+            lyrics = get_lyrics(self.msg)
+            response_msg = {
+                    "message": {"text": lyrics}
+            }
+
+            self.post_message(response_msg)
+
+            # menu options
+            response_msg = {
+                "message": {
+                    "attachment": {
+                        "type": "template",
+                        "payload": {
+                            "template_type": "button",
+                            "text": configuration.MENU_MSG_2,
+                            "buttons": [
+                                {
+                                    "type": "postback",
+                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
+                                    "payload": StateEnum.SEARCH_LYRICS.value,
+                                },
+                                {
+                                    "type": "postback",
+                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
+                                    "payload": StateEnum.CHECK_REPORTS.value,
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+
+            self.post_message(response_msg)
+
+            # update state
+            conversation.state = StateEnum.GET_STARTED
+            conversation.save()
+
+        elif conversation.state == str(StateEnum.SAVE_TRACK):
             if self.msg == "Si":
 
                 # Get previous track_id
-                # Maybe put a type in message instead of awful "1" index
+                # Maybe put a type in message instead of an awful "1" index
                 track_id = Message.objects.filter(conversation=conversation)[1]
 
                 favorite = Track.objects.create(conversation=conversation,
@@ -340,16 +327,16 @@ class FacebookMessage(object):
                         "type": "template",
                         "payload": {
                             "template_type": "button",
-                            "text": MENU_MSG_2,
+                            "text": configuration.MENU_MSG_2,
                             "buttons": [
                                 {
                                     "type": "postback",
-                                    "title": MENU_BTN_SEARCH_TITLE,
+                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
                                     "payload": StateEnum.SEARCH_LYRICS.value,
                                 },
                                 {
                                     "type": "postback",
-                                    "title": MENU_BTN_REPORTS_TITLE,
+                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
                                     "payload": StateEnum.CHECK_REPORTS.value,
                                 }
                             ]
@@ -408,3 +395,49 @@ class MusicBotView(generic.View):
                     fbm.handle_message()
 
         return HttpResponse()
+
+
+class WebView(generic.FormView):
+    template_name = "track_list.html"
+    form_class = TrackForm
+    success_url = "."
+
+    @method_decorator(xframe_options_exempt)
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def form_valid(self, form):
+        # Return response to fb messenger
+        sender_id = form.cleaned_data['sender_id']
+        track_id = form.cleaned_data['track_id']
+
+        fbm = FacebookMessage(sender_id, track_id)
+        fbm.handle_message()
+
+        return super(WebView, self).form_valid(form)
+
+# Ajax track list call
+def get_track_list(request):
+    sender_id = request.GET.get('sender_id', None)
+    conversation = Conversation.objects.get(fb_user_id = sender_id)
+
+    if conversation.state == str(StateEnum.SHOW_LYRICS):
+        message = Message.objects.filter(conversation=conversation)[0]
+        track_data = search_track(message.text)
+
+        # print(track_list)
+        data = {
+                'track_list': track_data[:5],
+            }
+    elif conversation.state == str(StateEnum.SHOW_LYRICS_FAV):
+        tracks = Track.objects.filter(conversation=conversation)
+
+        track_data = [get_track(track.track_id)
+                      for track in tracks]
+
+        data = {
+                'track_list': track_data[:5]
+            }
+
+    return JsonResponse(data)
