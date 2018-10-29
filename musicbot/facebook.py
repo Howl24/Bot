@@ -61,7 +61,7 @@ class FacebookMessageHandler(object):
 
 
     def get_user_name(self):
-        url = "https://graph.facebook.com/" + str(self.sender_id) + 
+        url = "https://graph.facebook.com/" + str(self.sender_id) + \
               "?fields=first_name&access_token=" + \
               configuration.FACEBOOK_MESSENGER_TOKEN
 
