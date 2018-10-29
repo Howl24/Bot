@@ -42,6 +42,11 @@ def get_lyrics(track_id):
     request = call_musixmatch_api(service, params)
     data = request.json()
     data = data['message']['body']
-    lyrics = data['lyrics']['lyrics_body']
-    print("Lyrics:", lyrics)
+
+    try:
+        lyrics = data['lyrics']['lyrics_body']
+        print("Lyrics:", lyrics)
+    except:
+        lyrics = None
+
     return lyrics
