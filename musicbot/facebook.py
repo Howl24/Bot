@@ -39,6 +39,39 @@ class FacebookMessageHandler(object):
                                data=json_response)
         pprint(status.json())
 
+    def get_user_name(self):
+        url = "https://graph.facebook.com/" + str(self.sender_id) + \
+              "?fields=first_name&access_token=" + \
+              configuration.FACEBOOK_MESSENGER_TOKEN
+
+        try:
+            data = requests.get(url).json()
+            print(data)
+            result = data['first_name']
+            print(result)
+        except:
+            result = ""
+
+        return result
+
+    def handle_message(self):
+        print("Message: ", self.msg)
+        c = self.get_conversation()
+
+        if not c:
+            c = Conversation.objects.create(fb_user_id=self.sender_id,
+                                            state=StateEnum.NEW)
+            c.save()
+
+        self.save_message(c)
+        self.respond_message(c)
+
+class MusicbotMessageHandler(FacebookMessageHandler):
+    POST_MESSAGE_URL = configuration.FACEBOOK_POST_MESSAGE_URL
+
+    def __init__(self, sender_id, msg):
+        super().__init__(sender_id, msg)
+
     def get_insights(self):
         # 100 likes to activate this?
         #url = "https://graph.facebook.com/v2.8/me/insights/" + \
@@ -58,22 +91,6 @@ class FacebookMessageHandler(object):
                     ]
 
         return insights
-
-
-    def get_user_name(self):
-        url = "https://graph.facebook.com/" + str(self.sender_id) + \
-              "?fields=first_name&access_token=" + \
-              configuration.FACEBOOK_MESSENGER_TOKEN
-
-        try:
-            data = requests.get(url).json()
-            print(data)
-            result = data['first_name']
-            print(result)
-        except:
-            result = ""
-
-        return result
 
     def respond_message(self, conversation):
         if conversation.state == str(StateEnum.NEW) or \
@@ -384,14 +401,3 @@ class FacebookMessageHandler(object):
             conversation.state = StateEnum.GET_STARTED
             conversation.save()
 
-    def handle_message(self):
-        print("Message: ", self.msg)
-        c = self.get_conversation()
-
-        if not c:
-            c = Conversation.objects.create(fb_user_id=self.sender_id,
-                                            state=StateEnum.NEW)
-            c.save()
-
-        self.save_message(c)
-        self.respond_message(c)
