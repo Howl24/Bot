@@ -67,7 +67,9 @@ class FacebookMessageHandler(object):
 
         try:
             data = requests.get(url)
+            print(data)
             result = data['first_name']
+            print(result)
         except:
             result = ""
 
@@ -78,8 +80,9 @@ class FacebookMessageHandler(object):
            conversation.state == StateEnum.NEW:
             # welcome msg
             name = self.get_user_name()
+            print(name)
 
-            txt = "Hola, " + name + ". Soy Musicbot! Un bot para encontrar la letra de tus canciones favoritas."
+            txt = "Hola, " + str(name) + ". Soy Musicbot! Un bot para encontrar la letra de tus canciones favoritas."
 
             response_msg = {
                     "message": {"text": txt}
