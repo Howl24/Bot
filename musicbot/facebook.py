@@ -66,7 +66,7 @@ class FacebookMessageHandler(object):
               configuration.FACEBOOK_MESSENGER_TOKEN
 
         try:
-            data = requests.get(url)
+            data = requests.get(url).json()
             print(data)
             result = data['first_name']
             print(result)
