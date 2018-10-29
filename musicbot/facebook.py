@@ -40,10 +40,10 @@ class FacebookMessageHandler(object):
     def get_insights(self):
 
         # 100 likes to activate this?
-        url = "https://graph.facebook.com/v2.8/me/insights/" + \
-              "?metric=" + LIST_OF_METRICS + \
-              "&access_token=" + PAGE_ACCESS_TOKEN
-        data = requests.get(url)
+        #url = "https://graph.facebook.com/v2.8/me/insights/" + \
+        #      "?metric=" + LIST_OF_METRICS + \
+        #      "&access_token=" + PAGE_ACCESS_TOKEN
+        #data = requests.get(url)
         # data is empty
         # Replacement string generated
 
