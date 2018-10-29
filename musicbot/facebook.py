@@ -48,8 +48,8 @@ class FacebookMessageHandler(object):
         # Replacement string generated
 
 
-        insights = "Total de usuarios: 1\n" +
-                   "Total de usuarios activos: 1\n" +
+        insights = "Total de usuarios: 1\n" + \
+                   "Total de usuarios activos: 1\n" + \
                    "Usuarios nuevos en esta semana: 1\n"
 
         return insights
