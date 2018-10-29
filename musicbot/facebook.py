@@ -40,7 +40,6 @@ class FacebookMessageHandler(object):
         pprint(status.json())
 
     def get_insights(self):
-
         # 100 likes to activate this?
         #url = "https://graph.facebook.com/v2.8/me/insights/" + \
         #      "?metric=" + LIST_OF_METRICS + \
@@ -60,12 +59,30 @@ class FacebookMessageHandler(object):
 
         return insights
 
+
+    def get_user_name(self):
+        url = "https://graph.facebook.com/" + str(self.sender_id) + 
+              "?fields=first_name&access_token=" + \
+              configuration.FACEBOOK_MESSENGER_TOKEN
+
+        try:
+            data = requests.get(url)
+            result = data['first_name']
+        except:
+            result = ""
+
+        return result
+
     def respond_message(self, conversation):
         if conversation.state == str(StateEnum.NEW) or \
            conversation.state == StateEnum.NEW:
             # welcome msg
+            name = self.get_user_name()
+
+            txt = "Hola, " + name + ". Soy Musicbot! Un bot para encontrar la letra de tus canciones favoritas."
+
             response_msg = {
-                    "message": {"text": configuration.MENU_MSG_1}
+                    "message": {"text": txt}
                     }
 
             self.post_message(response_msg)
