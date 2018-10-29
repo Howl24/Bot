@@ -189,11 +189,11 @@ class FacebookMessage(object):
                                     "buttons": [
                                         {
                                             "type": "web_url",
-                                            "url": "https://4dbb16ea.ngrok.io/musicbot/webview",
+                                            "url": "https://still-ravine-89797.herokuapp.com/musicbot/webview",
                                             "title": "Ver canciones",
                                             "webview_height_ratio": "tall",
                                             "messenger_extensions": "true",
-                                            "fallback_url": "https://4dbb16ea.ngrok.io/musicbot/webview/",
+                                            "fallback_url": "https://still-ravine-89797.herokuapp.com/musicbot/webview/",
                                         }
                                         ]
                                     }
@@ -216,11 +216,11 @@ class FacebookMessage(object):
                                 "buttons": [
                                     {
                                         "type": "web_url",
-                                        "url": "https://4dbb16ea.ngrok.io/musicbot/webview",
+                                        "url": "https://still-ravine-89797.herokuapp.com/musicbot/webview",
                                         "title": "Ver canciones",
                                         "webview_height_ratio": "tall",
                                         "messenger_extensions": "true",
-                                        "fallback_url": "https://4dbb16ea.ngrok.io/musicbot/webview/",
+                                        "fallback_url": "https://still-ravine-89797.herokuapp.com/musicbot/webview/",
                                     }
                                     ]
                                 }
