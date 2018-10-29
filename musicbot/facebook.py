@@ -4,6 +4,8 @@ from .models import Message, Conversation, StateEnum, Track
 import requests
 import json
 from pprint import pprint
+from datetime import timedelta
+from django.utils import timezone
 
 
 class FacebookMessageHandler(object):
@@ -47,10 +49,14 @@ class FacebookMessageHandler(object):
         # data is empty
         # Replacement string generated
 
+        all_users = Conversation.objects.all().count()
 
-        insights = "Total de usuarios: 1\n" + \
-                   "Total de usuarios activos: 1\n" + \
-                   "Usuarios nuevos en esta semana: 1\n"
+        last_week = timezone.now().date() - timedelta(days=7)
+        new_users = Conversation.objects.filter(created__gte=last_week).count()
+
+        insights = ["Total de usuarios: "+ str(all_users),
+                    "Nuevos usuarios esta semana: " + str(new_users),
+                    ]
 
         return insights
 
@@ -131,13 +137,14 @@ class FacebookMessageHandler(object):
             if self.msg == StateEnum.CHECK_REPORTS.value:
                 #TODO
                 insights = self.get_insights()
-                response_msg = {
-                        "message": {
-                            "text": insights,
-                            }
-                    }
+                for txt in insights:
+                    response_msg = {
+                            "message": {
+                                "text": txt,
+                                }
+                        }
 
-                self.post_message(response_msg)
+                    self.post_message(response_msg)
 
                 # menu options
                 response_msg = {
