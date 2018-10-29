@@ -37,6 +37,23 @@ class FacebookMessageHandler(object):
                                data=json_response)
         pprint(status.json())
 
+    def get_insights(self):
+
+        # 100 likes to activate this?
+        url = "https://graph.facebook.com/v2.8/me/insights/" + \
+              "?metric=" + LIST_OF_METRICS + \
+              "&access_token=" + PAGE_ACCESS_TOKEN
+        data = requests.get(url)
+        # data is empty
+        # Replacement string generated
+
+
+        insights = "Total de usuarios: 1\n" +
+                   "Total de usuarios activos: 1\n" +
+                   "Usuarios nuevos en esta semana: 1\n"
+
+        return insights
+
     def respond_message(self, conversation):
         if conversation.state == str(StateEnum.NEW) or \
            conversation.state == StateEnum.NEW:
@@ -112,13 +129,11 @@ class FacebookMessageHandler(object):
                 conversation.save()
 
             if self.msg == StateEnum.CHECK_REPORTS.value:
-
-                cnt_users = Conversation.objects.all().count()
-                report_text = "Número de usuarios: " + str(cnt_users)
-
+                #TODO
+                insights = self.get_insights()
                 response_msg = {
                         "message": {
-                            "text": report_text,
+                            "text": insights,
                             }
                     }
 
