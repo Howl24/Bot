@@ -6,398 +6,190 @@ import json
 from pprint import pprint
 from datetime import timedelta
 from django.utils import timezone
+from . import configuration
+from . import musixmatch
+from .models import PayloadEnum
 
 
-class FacebookMessageHandler(object):
-    POST_MESSAGE_URL = configuration.FACEBOOK_POST_MESSAGE_URL
+class Response(object):
+    def get_context(self, conversation):
+        """Allow to update variables using the conversation context"""
+        pass
 
-    def __init__(self, sender_id, msg):
-        self.sender_id = sender_id
-        self.msg = msg
+    def build_response_data(self, conversation):
+        """Build a response data dictionary"""
+        raise NotImplementedError
 
-    def get_conversation(self):
-        try:
-            c = Conversation.objects.get(fb_user_id=self.sender_id)
-        except Conversation.DoesNotExist:
-            c = None
+    def post_message(self, response_data):
+        """Post response to Messenger """
+        json_response = json.dumps(response_data)
 
-        return c
-
-    def save_message(self, conversation):
-        m = Message.objects.create(conversation=conversation,
-                                   text=self.msg)
-        m.save()
-
-    def post_message(self, response_msg):
-        json_response = json.dumps({
-            "recipient": {"id": self.sender_id},
-            **response_msg,
-        })
-
-        status = requests.post(FacebookMessageHandler.POST_MESSAGE_URL,
+        status = requests.post(configuration.FACEBOOK_POST_MESSAGE_URL,
                                headers={"Content-Type": "application/json"},
                                data=json_response)
         pprint(status.json())
 
-    def get_user_name(self):
-        url = "https://graph.facebook.com/" + str(self.sender_id) + \
-              "?fields=first_name&access_token=" + \
-              configuration.FACEBOOK_MESSENGER_TOKEN
+    def send_to(self, conversation):
+        """Send response to Messenger using the conversation context"""
+        self.get_context(conversation)
+        response_data = self.build_response_data(conversation)
+        self.post_message(response_data)
+
+
+class QuickResponse(Response):
+    def __init__(self, text, response_list):
+        self.text = text
+        self.response_list = response_list  # (response, payload) list
+
+    def build_response_data(self, conversation):
+        response_data = {
+            "recipient": {"id": conversation.fb_user_id},
+            "message": {
+                "text": self.text,
+                "quick_replies": [
+                    {
+                    "content_type": "text",
+                    "title": response,
+                    "payload": payload,
+                    }
+                for response, payload in self.response_list]
+            }
+        }
+
+        return response_data
+
+
+class TextResponse(Response):
+    def __init__(self, response_text):
+        self.response_text = response_text
+
+    def build_response_data(self, conversation):
+        response_data = {
+            "recipient": {"id": conversation.fb_user_id},
+            "message": {"text": self.response_text}
+        }
+        return response_data
+
+
+class NamedTextResponse(TextResponse):
+    def get_context(self, conversation):
+        url = "https://graph.facebook.com/{sender_id}?fields=first_name&access_token={token}"
+        url = url.format(sender_id=conversation.fb_user_id,
+                         token=configuration.FACEBOOK_MESSENGER_TOKEN)
+
+        data = requests.get(url).json()
 
         try:
-            data = requests.get(url).json()
-            print(data)
-            result = data['first_name']
-            print(result)
-        except:
-            result = ""
+            name = data['first_name']
+        except KeyError:
+            name = ""
 
-        return result
+        # check TextResponse for "response_text" attribute
+        self.response_text = self.response_text.format(name=name)
 
-    def handle_message(self):
-        print("Message: ", self.msg)
-        c = self.get_conversation()
 
-        if not c:
-            c = Conversation.objects.create(fb_user_id=self.sender_id,
-                                            state=StateEnum.NEW)
-            c.save()
+class WebviewResponse(Response):
+    def __init__(self, text, title, url, webview_height_ratio):
+        self.text = text
+        self.title = title
+        self.url = url
+        self.ratio = webview_height_ratio
 
-        self.save_message(c)
-        self.respond_message(c)
+    def build_response_data(self, conversation):
+        response_data = {
+            "recipient": {"id": conversation.fb_user_id},
+            "message": {
+                "attachment": {
+                    "type": "template",
+                    "payload": {
+                        "template_type": "button",
+                        "text": self.text,
+                        "buttons": [
+                            {
+                                "type": "web_url",
+                                "url": self.url,
+                                "title": self.title,
+                                "webview_height_ratio": self.ratio,
+                                "messenger_extensions": "true",
+                                "fallback_url": self.url,  # Is this ok?
+                            }
+                            ]
+                        }
+                }
+            }
+        }
+        return response_data
 
-class MusicbotMessageHandler(FacebookMessageHandler):
-    POST_MESSAGE_URL = configuration.FACEBOOK_POST_MESSAGE_URL
+class IdWebviewResponse(WebviewResponse):
+    def get_context(self, conversation):
+        self.url = self.url.format(sender_id=conversation.fb_user_id)
 
-    def __init__(self, sender_id, msg):
-        super().__init__(sender_id, msg)
+class ResponseCollection(object):
+    """
+    Simple Response wrapper with send_to method.
+    """
 
-    def get_insights(self):
-        # 100 likes to activate this?
-        #url = "https://graph.facebook.com/v2.8/me/insights/" + \
-        #      "?metric=" + LIST_OF_METRICS + \
-        #      "&access_token=" + PAGE_ACCESS_TOKEN
-        #data = requests.get(url)
-        # data is empty
-        # Replacement string generated
+    def __init__(self, responses):
+        self.responses = responses
 
-        all_users = Conversation.objects.all().count()
+    def send_to(self, conversation):
+        for response in self.responses:
+            response.send_to(conversation)
+
+class ReportResponseCollection(ResponseCollection):
+
+    def send_to(self, conversation):
+        cnt_users = Conversation.objects.all().count()
+        self.responses[0].response_text = self.responses[0].response_text.format(
+                number = cnt_users)
 
         last_week = timezone.now().date() - timedelta(days=7)
         new_users = Conversation.objects.filter(created__gte=last_week).count()
 
-        insights = ["Total de usuarios: "+ str(all_users),
-                    "Nuevos usuarios esta semana: " + str(new_users),
-                    ]
+        self.responses[1].response_text = self.responses[1].response_text.format(
+                number = new_users)
 
-        return insights
 
-    def respond_message(self, conversation):
-        if conversation.state == str(StateEnum.NEW) or \
-           conversation.state == StateEnum.NEW:
-            # welcome msg
-            name = self.get_user_name()
-            print(name)
+        searchs = Message.objects.filter(payload=PayloadEnum.SEARCH_LYRICS.name).count()
+        self.responses[2].response_text = self.responses[2].response_text.format(
+                number= searchs)
 
-            txt = "Hola, " + str(name) + ". Soy Musicbot! Un bot para encontrar la letra de tus canciones favoritas."
+        super().send_to(conversation)
 
-            response_msg = {
-                    "message": {"text": txt}
-                    }
 
-            self.post_message(response_msg)
+class MessageHandler(object):
+    def __init__(self):
+        self.responses = {}
 
-            # menu options
-            response_msg = {
-                "message": {
-                    "attachment": {
-                        "type": "template",
-                        "payload": {
-                            "template_type": "button",
-                            "text": configuration.MENU_MSG_2,
-                            "buttons": [
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
-                                    "payload": StateEnum.SEARCH_LYRICS.value,
-                                },
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
-                                    "payload": StateEnum.CHECK_REPORTS.value,
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
+    def set_response(self, text, response, next_state):
+        self.responses[text] = (response, next_state)
 
-            self.post_message(response_msg)
+    def handle_message(self, text, payload, conversation):
+        Message.objects.create(conversation=conversation,
+                               text=text,
+                               payload=payload)
 
-            # update state
-            conversation.state = StateEnum.GET_STARTED
-            conversation.save()
+        # payload priority over text
+        if payload in self.responses:
+            response, new_state = self.responses[payload]
+        elif text in self.responses:
+            response, new_state = self.responses[text]
+        else:
+            response = TextResponse("Vuelve a intentar")
+            new_state = conversation.state
 
-        elif conversation.state == str(StateEnum.GET_STARTED):
-            if self.msg == StateEnum.SEARCH_LYRICS.value:
-                # search options
-                response_msg = {
-                    "message": {
-                        "attachment": {
-                            "type": "template",
-                            "payload": {
-                                "template_type": "button",
-                                "text": configuration.MENU_SEARCH_MSG,
-                                "buttons": [
-                                    {
-                                        "type": "postback",
-                                        "title": configuration.MENU_SEARCH_NEW_TITLE,
-                                        "payload": StateEnum.SEARCH_NEW_SONG.value,
-                                    },
-                                    {
-                                        "type": "postback",
-                                        "title": configuration.MENU_SEARCH_FAV_TITLE,
-                                        "payload": StateEnum.SEARCH_FROM_FAV.value,
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
+        response.send_to(conversation)
+        conversation.state = new_state
+        conversation.save()
 
-                self.post_message(response_msg)
 
-                # update state
-                conversation.state = StateEnum.SEARCH_LYRICS
-                conversation.save()
+class SaveSongMessageHandler(MessageHandler):
 
-            if self.msg == StateEnum.CHECK_REPORTS.value:
-                #TODO
-                insights = self.get_insights()
-                for txt in insights:
-                    response_msg = {
-                            "message": {
-                                "text": txt,
-                                }
-                        }
+    def handle_message(self, text, payload, conversation):
+        if payload == PayloadEnum.SAVE_FAV.name:
+            track_msg = Message.objects.filter(conversation=conversation)[:1].get()
 
-                    self.post_message(response_msg)
+            Track.objects.create(conversation=conversation,
+                                 track_id = track_msg.text)
 
-                # menu options
-                response_msg = {
-                    "message": {
-                        "attachment": {
-                            "type": "template",
-                            "payload": {
-                                "template_type": "button",
-                                "text": configuration.MENU_MSG_2,
-                                "buttons": [
-                                    {
-                                        "type": "postback",
-                                        "title": configuration.MENU_BTN_SEARCH_TITLE,
-                                        "payload": StateEnum.SEARCH_LYRICS.value,
-                                    },
-                                    {
-                                        "type": "postback",
-                                        "title": configuration.MENU_BTN_REPORTS_TITLE,
-                                        "payload": StateEnum.CHECK_REPORTS.value,
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-
-                self.post_message(response_msg)
-
-        elif conversation.state == str(StateEnum.SEARCH_LYRICS):
-            if self.msg == StateEnum.SEARCH_NEW_SONG.value:
-                # ask song query
-                response_msg = {
-                    "message": {
-                        "text": configuration.ASK_SONG_QUERY,
-                    }
-                }
-                self.post_message(response_msg)
-
-                # update state
-                conversation.state = StateEnum.SEARCH_NEW_SONG
-                conversation.save()
-
-            if self.msg == StateEnum.SEARCH_FROM_FAV.value:
-                response_msg = {
-                        "message": {
-                            "attachment": {
-                                "type": "template",
-                                "payload": {
-                                    "template_type": "button",
-                                    "text": "Selecciona una canción de la lista",
-                                    "buttons": [
-                                        {
-                                            "type": "web_url",
-                                            "url": "https://still-ravine-89797.herokuapp.com/musicbot/webview",
-                                            "title": "Ver canciones",
-                                            "webview_height_ratio": "tall",
-                                            "messenger_extensions": "true",
-                                            "fallback_url": "https://still-ravine-89797.herokuapp.com/musicbot/webview/",
-                                        }
-                                        ]
-                                    }
-                                }
-                            }
-                }
-
-                self.post_message(response_msg)
-                conversation.state = StateEnum.SHOW_LYRICS_FAV
-                conversation.save()
-
-        elif conversation.state == str(StateEnum.SEARCH_NEW_SONG):
-            response_msg = {
-                    "message": {
-                        "attachment": {
-                            "type": "template",
-                            "payload": {
-                                "template_type": "button",
-                                "text": "Selecciona una canción de la lista",
-                                "buttons": [
-                                    {
-                                        "type": "web_url",
-                                        "url": "https://still-ravine-89797.herokuapp.com/musicbot/webview",
-                                        "title": "Ver canciones",
-                                        "webview_height_ratio": "tall",
-                                        "messenger_extensions": "true",
-                                        "fallback_url": "https://still-ravine-89797.herokuapp.com/musicbot/webview/",
-                                    }
-                                    ]
-                                }
-                            }
-                        }
-            }
-
-            self.post_message(response_msg)
-            conversation.state = StateEnum.SHOW_LYRICS
-            conversation.save()
-
-        elif conversation.state == str(StateEnum.SHOW_LYRICS):
-            lyrics = get_lyrics(self.msg)
-            response_msg = {
-                    "message": {"text": lyrics}
-            }
-
-            self.post_message(response_msg)
-
-            response_msg = {
-                "message": {
-                    "text": "Desea guardar la canción en la lista de favoritos?",
-                    "quick_replies": [
-                        {
-                            "content_type": "text",
-                            "title": "Si",
-                            "payload": "Si",
-                        },
-                        {
-                            "content_type": "text",
-                            "title": "No",
-                            "payload": "No",
-                        }
-                    ]
-                }
-            }
-            self.post_message(response_msg)
-
-            # update state
-            conversation.state = StateEnum.SAVE_TRACK
-            conversation.save()
-
-        elif conversation.state == str(StateEnum.SHOW_LYRICS_FAV):
-            lyrics = get_lyrics(self.msg)
-
-            # Not empy or None
-            if lyrics:
-                response_msg = {
-                        "message": {"text": lyrics}
-                }
-
-                self.post_message(response_msg)
-            else:
-                response_msg = {
-                        "message": {"text": "No pude encontrar letras de esta cancion :("}
-                }
-
-            # menu options
-            response_msg = {
-                "message": {
-                    "attachment": {
-                        "type": "template",
-                        "payload": {
-                            "template_type": "button",
-                            "text": configuration.MENU_MSG_2,
-                            "buttons": [
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
-                                    "payload": StateEnum.SEARCH_LYRICS.value,
-                                },
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
-                                    "payload": StateEnum.CHECK_REPORTS.value,
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            self.post_message(response_msg)
-
-            # update state
-            conversation.state = StateEnum.GET_STARTED
-            conversation.save()
-
-        elif conversation.state == str(StateEnum.SAVE_TRACK):
-            if self.msg == "Si":
-
-                # Get previous track_id
-                # Maybe put a type in message instead of an awful "1" index
-                track_id = Message.objects.filter(conversation=conversation)[1]
-
-                favorite = Track.objects.create(conversation=conversation,
-                                                track_id=track_id.text)
-                favorite.save()
-
-                response_msg = {
-                        "message": {"text": "Se guardó la canción :)"}
-                }
-                self.post_message(response_msg)
-
-            # Return to menu options
-            response_msg = {
-                "message": {
-                    "attachment": {
-                        "type": "template",
-                        "payload": {
-                            "template_type": "button",
-                            "text": configuration.MENU_MSG_2,
-                            "buttons": [
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_SEARCH_TITLE,
-                                    "payload": StateEnum.SEARCH_LYRICS.value,
-                                },
-                                {
-                                    "type": "postback",
-                                    "title": configuration.MENU_BTN_REPORTS_TITLE,
-                                    "payload": StateEnum.CHECK_REPORTS.value,
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-            self.post_message(response_msg)
-
-            # update state
-            conversation.state = StateEnum.GET_STARTED
-            conversation.save()
-
+        super().handle_message(text, payload, conversation)

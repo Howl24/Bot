@@ -29,8 +29,7 @@ DEBUG = bool(os.environ.get('DJANGO_DEBUG', True))
 ALLOWED_HOSTS = [
     'still-ravine-89797.herokuapp.com',
     '127.0.0.1',
-    '1a607f92.ngrok.io',
-    '6890fec0.ngrok.io',
+    'abdf09d5.ngrok.io',
 ]
 
 

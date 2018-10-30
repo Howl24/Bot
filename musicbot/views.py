@@ -1,15 +1,147 @@
 from django.views import generic
+from django.views.generic.edit import FormMixin
 from django.http.response import HttpResponse
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
-from .models import Message, Conversation, StateEnum, Track
+from .models import Message, Conversation, StateEnum, Track, PayloadEnum
 from .forms import TrackForm
 from .musixmatch import search_track
 from .musixmatch import get_track
-from .facebook import FacebookMessageHandler
+from . import musixmatch
 import json
+from .facebook import (MessageHandler,
+                       TextResponse,
+                       NamedTextResponse,
+                       QuickResponse,
+                       ResponseCollection,
+                       ReportResponseCollection,
+                       WebviewResponse,
+                       IdWebviewResponse,
+                       SaveSongMessageHandler,
+                       )
+
+# StateEnum.WELCOME
+welcomeMH = MessageHandler()
+welcomeMH.set_response(
+        PayloadEnum.WELCOME.name,
+        ResponseCollection([
+            NamedTextResponse("Hola {name} :) Bienvenido a Musixbot!"),
+            QuickResponse("Que deseas hacer?", [
+                ("Buscar canciones", PayloadEnum.SEARCH_LYRICS.name),
+                ("Ver reportes", PayloadEnum.SHOW_REPORTS.name)
+            ]),
+        ]),
+        StateEnum.MENU_OPTIONS.name)
+
+# StateEnum.MENU_OPTIONS
+menuOptionsMH = MessageHandler()
+menuOptionsMH.set_response(
+        PayloadEnum.SEARCH_LYRICS.name,
+        QuickResponse("Ver lista de favoritos?",[
+            ("Si", PayloadEnum.FAV_LIST.name),
+            ("No", PayloadEnum.NO_FAV_LIST.name)
+        ]),
+        StateEnum.MENU_FAV_LIST.name)
+
+menuOptionsMH.set_response(
+        PayloadEnum.SHOW_REPORTS.name,
+        ReportResponseCollection([
+            TextResponse("Total de usuarios: {number}"),
+            TextResponse("Nuevos usuarios esta semana: {number}"),
+            TextResponse("Búsquedas en la semana: {number}"),
+            QuickResponse("Que deseas hacer?", [
+                ("Buscar canciones", PayloadEnum.SEARCH_LYRICS.name),
+                ("Ver reportes", PayloadEnum.SHOW_REPORTS.name)
+            ]),
+        ]),
+        StateEnum.MENU_OPTIONS.name)
+
+# StateEnum.MENU_FAV_LIST
+menuFavListMH = MessageHandler()
+menuFavListMH.set_response(
+        PayloadEnum.FAV_LIST.name,
+        IdWebviewResponse(
+            "Seleccione una canción.",
+            "Ver canciones",
+            "https://abdf09d5.ngrok.io/musicbot/songlistview/fav/{sender_id}/",
+            "tall"),
+        StateEnum.SONG_SELECTED.name)
+
+menuFavListMH.set_response(
+        PayloadEnum.NO_FAV_LIST.name,
+        ResponseCollection([
+            TextResponse("Hora de buscar una canción!"),
+            TextResponse("Dime el nombre de la canción o del artista"),
+            TextResponse("Si recuerdas algunas palabras de la canción también puedes indicarla"),
+        ]),
+        StateEnum.ASK_SONG_QUERY.name)
+
+
+# StateEnum.ASK_SONG_QUERY
+askSongQueryMH = MessageHandler()
+askSongQueryMH.set_response(
+        PayloadEnum.EMPTY.name,
+        IdWebviewResponse(
+            "Seleccione una canción.",
+            "Ver canciones",
+            "https://abdf09d5.ngrok.io/musicbot/songlistview/nofav/{sender_id}",
+            "tall"),
+        StateEnum.SONG_SELECTED.name)
+
+# StateEnum.SONG_SELECTED
+selectedSongMH = MessageHandler()
+selectedSongMH.set_response(
+        PayloadEnum.SONG_SELECTED.name,
+        ResponseCollection([
+            TextResponse("lyrics"),
+            QuickResponse("Guardar la canción en la lista de favoritos?", [
+                ("Si", PayloadEnum.SAVE_FAV.name),
+                ("No", PayloadEnum.NO_SAVE_FAV.name),
+            ]),
+        ]),
+        StateEnum.MENU_SAVE_FAV.name)
+
+selectedSongMH.set_response(
+        PayloadEnum.FAV_SONG_SELECTED.name,
+        ResponseCollection([
+            TextResponse("lyrics"),
+            QuickResponse("Que deseas hacer?", [
+                ("Buscar canciones", PayloadEnum.SEARCH_LYRICS.name),
+                ("Ver reportes", PayloadEnum.SHOW_REPORTS.name)
+            ]),
+        ]),
+        StateEnum.MENU_OPTIONS.name)
+
+menuSaveFavMH = SaveSongMessageHandler()
+menuSaveFavMH.set_response(
+        PayloadEnum.SAVE_FAV.name,
+        ResponseCollection([
+            TextResponse("Listo!"),
+            QuickResponse("Que deseas hacer?", [
+                ("Buscar canciones", PayloadEnum.SEARCH_LYRICS.name),
+                ("Ver reportes", PayloadEnum.SHOW_REPORTS.name)
+            ]),
+        ]),
+        StateEnum.MENU_OPTIONS.name)
+
+menuSaveFavMH.set_response(
+        PayloadEnum.NO_SAVE_FAV.name,
+        QuickResponse("Que deseas hacer?", [
+            ("Buscar canciones", PayloadEnum.SEARCH_LYRICS.name),
+            ("Ver reportes", PayloadEnum.SHOW_REPORTS.name)
+        ]),
+        StateEnum.MENU_OPTIONS.name)
+
+MH = {}
+MH[StateEnum.WELCOME.name] = welcomeMH
+MH[StateEnum.MENU_OPTIONS.name] = menuOptionsMH
+MH[StateEnum.MENU_FAV_LIST.name] = menuFavListMH
+MH[StateEnum.ASK_SONG_QUERY.name] = askSongQueryMH
+MH[StateEnum.SONG_SELECTED.name] = selectedSongMH
+MH[StateEnum.MENU_SAVE_FAV.name] = menuSaveFavMH
+
 
 
 class MusicBotView(generic.View):
@@ -32,24 +164,58 @@ class MusicBotView(generic.View):
             for message in entry['messaging']:
                 sender_id = message['sender']['id']
                 text = ""
-
-                if 'message' in message:
-                    text = message['message']['text']
+                payload = PayloadEnum.EMPTY.name
 
                 if 'postback' in message:
-                    text = message['postback']['payload']
+                    payload = message['postback']['payload']
+                    text = message['postback']['title']
+
+                elif 'message' in message:
+                    text = message['message']['text']
+
+                    if "quick_reply" in message['message']:
+                        payload = message['message']['quick_reply']['payload']
 
                 if text:
-                    fbm = FacebookMessageHandler(sender_id, text)
-                    fbm.handle_message()
+                    print("Text: ", text)
+                    print("Payload: ", payload)
+                    try:
+                        c = Conversation.objects.get(fb_user_id=sender_id)
+                    except Conversation.DoesNotExist:
+                        c = Conversation.objects.create(
+                                fb_user_id=sender_id,
+                                state=StateEnum.WELCOME.name)
+
+                    print("State: ", c.state)
+                    print(MH[c.state])
+                    MH[c.state].handle_message(text, payload, c)
 
         return HttpResponse()
 
 
-class WebView(generic.FormView):
+class SongListView(generic.ListView,
+                   generic.edit.FormMixin,
+                   generic.edit.ProcessFormView):
+
     template_name = "track_list.html"
     form_class = TrackForm
     success_url = "."
+
+    def get_queryset(self):
+        sender_id = self.kwargs['sender_id']
+        query_type = self.kwargs['fav']
+
+        if query_type == "fav":
+            c = Conversation.objects.get(fb_user_id = sender_id)
+            tracks = Track.objects.filter(conversation=c)
+
+            track_list = [get_track(track.track_id)
+                          for track in tracks]
+        else:
+            last_msg = Message.objects.all()[:1].get()
+            track_list = musixmatch.search_track(last_msg.text)
+
+        return track_list[:5]
 
     @method_decorator(xframe_options_exempt)
     @method_decorator(csrf_exempt)
@@ -57,37 +223,24 @@ class WebView(generic.FormView):
         return super().dispatch(*args, **kwargs)
 
     def form_valid(self, form):
-        # Return response to fb messenger
         sender_id = form.cleaned_data['sender_id']
         track_id = form.cleaned_data['track_id']
 
-        fbm = FacebookMessageHandler(sender_id, track_id)
-        fbm.handle_message()
+        query_type = self.kwargs['fav']
+        if query_type == "fav":
+            payload = PayloadEnum.FAV_SONG_SELECTED.name
+        else:
+            payload = PayloadEnum.SONG_SELECTED.name
 
-        return super(WebView, self).form_valid(form)
+        lyrics = musixmatch.get_lyrics(track_id)
 
+        c = Conversation.objects.get(fb_user_id=sender_id)
 
-# Ajax track list call
-def get_track_list(request):
-    sender_id = request.GET.get('sender_id', None)
-    conversation = Conversation.objects.get(fb_user_id=sender_id)
+        # Check vs LyricsTextResponse with conversation query
+        #  and lyrics by last message
+        MH[c.state].responses[payload][0].responses[0].response_text = lyrics
 
-    if conversation.state == str(StateEnum.SHOW_LYRICS):
-        message = Message.objects.filter(conversation=conversation)[0]
-        track_data = search_track(message.text)
+        # Simulate a Messenger message
+        MH[c.state].handle_message(track_id, payload, c)
 
-        # print(track_list)
-        data = {
-                'track_list': track_data[:5],
-            }
-    elif conversation.state == str(StateEnum.SHOW_LYRICS_FAV):
-        tracks = Track.objects.filter(conversation=conversation)
-
-        track_data = [get_track(track.track_id)
-                      for track in tracks]
-
-        data = {
-                'track_list': track_data[:5]
-            }
-
-    return JsonResponse(data)
+        return super(SongListView, self).form_valid(form)
