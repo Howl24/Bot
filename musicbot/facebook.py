@@ -148,18 +148,18 @@ class ReportResponseCollection(ResponseCollection):
         cnt_users = Conversation.objects.all().count()
 
         self.responses = copy(self.responses_template)
-        self.responses[0].response_text = self.responses[0].response_text.format(
+        self.responses[0].response_text = self.responses_template[0].response_text.format(
                 number = cnt_users)
 
         last_week = timezone.now().date() - timedelta(days=7)
         new_users = Conversation.objects.filter(created__gte=last_week).count()
 
-        self.responses[1].response_text = self.responses[1].response_text.format(
+        self.responses[1].response_text = self.responses_template[1].response_text.format(
                 number = new_users)
 
 
         searchs = Message.objects.filter(payload=PayloadEnum.SEARCH_LYRICS.name).count()
-        self.responses[2].response_text = self.responses[2].response_text.format(
+        self.responses[2].response_text = self.responses_template[2].response_text.format(
                 number= searchs)
 
         super().send_to(conversation)
