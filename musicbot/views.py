@@ -65,7 +65,7 @@ menuFavListMH.set_response(
         IdWebviewResponse(
             "Seleccione una canción.",
             "Ver canciones",
-            "https://abdf09d5.ngrok.io/musicbot/songlistview/fav/{sender_id}/",
+            "https://still-ravine-89797.herokuapp.com/musicbot/songlistview/fav/{sender_id}/",
             "tall"),
         StateEnum.SONG_SELECTED.name)
 
@@ -86,7 +86,7 @@ askSongQueryMH.set_response(
         IdWebviewResponse(
             "Seleccione una canción.",
             "Ver canciones",
-            "https://abdf09d5.ngrok.io/musicbot/songlistview/nofav/{sender_id}",
+            "https://still-ravine-89797.herokuapp.com/musicbot/songlistview/nofav/{sender_id}",
             "tall"),
         StateEnum.SONG_SELECTED.name)
 
