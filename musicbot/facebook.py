@@ -9,6 +9,7 @@ from django.utils import timezone
 from . import configuration
 from . import musixmatch
 from .models import PayloadEnum
+from copy import copy
 
 
 class Response(object):
@@ -138,8 +139,15 @@ class ResponseCollection(object):
 
 class ReportResponseCollection(ResponseCollection):
 
+    def __init__(self, responses_template):
+        self.responses_template = responses_template
+
     def send_to(self, conversation):
+        self.responses = []
+
         cnt_users = Conversation.objects.all().count()
+
+        self.responses = copy(self.responses_template)
         self.responses[0].response_text = self.responses[0].response_text.format(
                 number = cnt_users)
 
